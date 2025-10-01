@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>EmotiMirror — Emotional Quiz App</title>
+<link rel="icon" href="favicon.png" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+:root{
+  --bg: #f3f6ff;
+  --card: #ffffff;
+  --accent: #5b6be6;
+  --muted: #6b7280;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;
+  font-family:Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  background: linear-gradient(135deg,#667eea 0%,#764ba2 100%);
+  min-height:100vh;
+  color:#0f172a;
+  display:flex;
+  flex-direction:column;
+}
+.topbar{
+  display:flex;
+  justify-content:flex-start;
+  align-items:center;
+  padding:16px 24px;
+  color:white;
+  font-weight:700;
+  font-size:1.3rem;
+}
+.container{
+  max-width:820px;
+  margin:20px auto;
+  padding:16px;
+  width:calc(100% - 32px);
+}
+.card{
+  background:var(--card);
+  border-radius:12px;
+  padding:24px;
+  box-shadow:0 6px 20px rgba(0,0,0,0.15);
+}
+.hidden{display:none}
+.lead{color:var(--muted); margin-top:8px}
+.meta{color:var(--muted); margin:12px 0}
+.actions{display:flex;gap:12px; margin-top:16px; flex-wrap:wrap}
+.btn{padding:12px 18px;border-radius:10px;border:none;cursor:pointer;background:#eef2ff;transition:0.2s; font-weight:500;}
+.btn.primary{background:linear-gradient(90deg,var(--accent),#7b8af7);color:white}
+.btn.primary:hover{opacity:0.9; transform:scale(1.03);}
+.q-text{font-size:1.15rem;margin:16px 0}
+.options{display:grid;grid-template-columns:repeat(1,1fr);gap:12px;margin-top:10px;}
+.response{padding:14px 16px;border-radius:12px;border:1px solid #e6e9ff;cursor:pointer;background:#fff;transition:0.2s;}
+.response:hover{background:var(--accent); color:white; transform:scale(1.02);}
+.response.selected{border-color:var(--accent);box-shadow:0 6px 18px rgba(91,107,230,0.15);background:var(--accent);color:white;}
+.nav-row{display:flex;justify-content:space-between;margin-top:20px}
+.progress{height:10px;background:#eef2ff;border-radius:999px;overflow:hidden;margin-top:8px;}
+#progressBar{height:100%;width:0%;background:linear-gradient(90deg,var(--accent),#9aa9ff)}
+.score-summary{display:grid;gap:12px;flex-wrap:wrap;margin:16px 0}
+.score-pill{background:#f3f6ff;padding:12px;border-radius:12px;border:1px solid #eef2ff;display:flex;justify-content:space-between;align-items:center;font-weight:500;}
+.footer{max-width:820px;margin:10px auto;color:#eef2ff;text-align:center;font-size:0.85rem}
+
+/* Toast notifications */
+.toast {
+  position: fixed;
+  bottom: 30px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #333;
+  color: #fff;
+  padding: 14px 24px;
+  border-radius: 12px;
+  opacity: 0;
+  pointer-events: none;
+  transition: all 0.3s ease;
+  z-index: 1000;
+}
+.toast.show {
+  opacity: 1;
+  pointer-events: auto;
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">EmotiMirror</div>
+
+<main class="container">
+  <!-- Welcome with name input -->
+  <section id="welcome" class="card">
+    <h1>Discover Your Emotional Archetype</h1>
+    <p class="lead">A reflective quiz to help you understand your emotional strengths.</p>
+    <div class="meta">10 questions · 5 traits · Instant results</div>
+    <input type="text" id="usernameInput" placeholder="Enter your name" style="padding:12px;border-radius:8px;border:1px solid #ccc;width:100%;margin-top:16px;">
+    <div class="actions">
+      <button id="startBtn" class="btn primary">Start Quiz</button>
+    </div>
+  </section>
+
+  <!-- Quiz section -->
+  <section id="quiz" class="card hidden">
+    <div class="quiz-header">
+      <h2>Question <span id="qNumber">1</span> / <span id="qTotal">10</span></h2>
+      <div id="progress" class="progress"><div id="progressBar"></div></div>
+    </div>
+    <div id="qText" class="q-text">Loading question...</div>
+    <div id="options" class="options"></div>
+    <div class="nav-row">
+      <button id="prevBtn" class="btn">Previous</button>
+      <button id="nextBtn" class="btn primary">Next</button>
+    </div>
+  </section>
+
+  <!-- Results section -->
+  <section id="results" class="card hidden">
+    <h2>Your Emotional Archetype</h2>
+    <h3 id="archetypeTitle">...</h3>
+    <p id="archetypeDesc"></p>
+
+    <div class="score-summary" id="scoreSummary"></div>
+
+    <h4>Your Story</h4>
+    <p id="storyText"></p>
+
+    <div class="actions">
+      <button id="saveBtn" class="btn primary">💾 Save Result</button>
+      <button id="exportPdfBtn" class="btn primary">Export PDF</button>
+      <button id="copyBtn" class="btn">Copy Result</button>
+      <button id="restartBtn" class="btn">Take Again</button>
+    </div>
+  </section>
+</main>
+
+<footer class="footer">
+  <small>Built with ❤️ by Kamesh — customizable, embeddable, license included.</small>
+</footer>
+
+<div id="toast" class="toast"></div>
+
+<script>
+const QUESTIONS = [
+  {q:"I enjoy trying new things and exploring different perspectives.", trait:"openness"},
+  {q:"I openly express how I feel with people I trust.", trait:"expressiveness"},
+  {q:"Even when stressed, I find ways to get back on my feet.", trait:"resilience"},
+  {q:"I sense what others are feeling without them saying it.", trait:"empathy"},
+  {q:"I set clear goals and pursue them with focus.", trait:"drive"},
+  {q:"I like reflecting on my emotions and learning from them.", trait:"openness"},
+  {q:"I can say 'no' when something doesn't feel right.", trait:"expressiveness"},
+  {q:"Challenges make me stronger rather than break me.", trait:"resilience"},
+  {q:"I enjoy supporting others through their emotional struggles.", trait:"empathy"},
+  {q:"I plan ahead and organize tasks to reach my aims.", trait:"drive"}
+];
+
+const ARCHETYPES = [
+  {id:'visionary', title:'The Visionary', desc:'Highly open, expressive and driven — you imagine possibilities and take action to make them real.'},
+  {id:'empath', title:'The Empath', desc:'You connect deeply with others and prioritize emotional harmony in relationships.'},
+  {id:'resilient', title:'The Resilient Doer', desc:'Stressful moments sharpen you; you recover and move forward with grit.'},
+  {id:'observer', title:'The Quiet Observer', desc:'You prefer to reflect and observe; introspection is your superpower.'}
+];
+
+let answers = Array(QUESTIONS.length).fill(0);
+let current = 0;
+const total = QUESTIONS.length;
+let username = "";
+
+const el = id => document.getElementById(id);
+
+function init(){
+  el('startBtn').onclick = startQuiz;
+  el('prevBtn').onclick = prev;
+  el('nextBtn').onclick = next;
+  el('restartBtn').onclick = restart;
+  el('saveBtn').onclick = saveResult;
+  el('copyBtn').onclick = copyResult;
+  el('exportPdfBtn').onclick = exportPDF;
+  el('qTotal').textContent = total;
+}
+
+function startQuiz(){
+  username = el('usernameInput').value.trim();
+  if(!username){ showToast("Please enter your name to start the quiz."); return; }
+  el('welcome').classList.add('hidden');
+  el('quiz').classList.remove('hidden');
+  current = 0;
+  answers = Array(total).fill(0);
+  renderQuestion();
+}
+
+function renderQuestion(){
+  el('qNumber').textContent = current+1;
+  el('qText').textContent = QUESTIONS[current].q;
+  const opts = el('options');
+  opts.innerHTML = '';
+  const labels = ['Strongly Disagree','Disagree','Neutral','Agree','Strongly Agree'];
+  for(let i=1;i<=5;i++){
+    const btn = document.createElement('div');
+    btn.className = 'response'+(answers[current]===i?' selected':'');
+    btn.textContent = labels[i-1];
+    btn.onclick = ()=>{ answers[current]=i; renderQuestion(); updateProgress(); };
+    opts.appendChild(btn);
+  }
+  updateProgress();
+}
+
+function updateProgress(){
+  const done = answers.filter(Boolean).length;
+  const pct = Math.round((done/total)*100);
+  el('progressBar').style.width = pct+'%';
+}
+
+function prev(){ if(current>0){ current--; renderQuestion(); } }
+
+function next(){
+  if(answers[current]===0){ showToast("Please select an option before moving on."); return; }
+  if(current<total-1){ current++; renderQuestion(); }
+  else calculateAndShow();
+}
+
+function calculateAndShow(){
+  const traitTotals = {}, traitCounts = {};
+  QUESTIONS.forEach((q,i)=>{
+    traitTotals[q.trait]=(traitTotals[q.trait]||0)+answers[i];
+    traitCounts[q.trait]=(traitCounts[q.trait]||0)+1;
+  });
+  const traitScores = {};
+  for(const t in traitTotals){ traitScores[t] = +(traitTotals[t]/traitCounts[t]).toFixed(1); }
+
+  const avg = Object.values(traitScores).reduce((a,b)=>a+b,0)/Object.values(traitScores).length;
+  let chosen = ARCHETYPES[3];
+  if(avg>=4.2) chosen=ARCHETYPES[0];
+  else{
+    const topTrait = Object.entries(traitScores).sort((a,b)=>b[1]-a[1])[0][0];
+    if(topTrait==='empathy') chosen=ARCHETYPES[1];
+    if(topTrait==='resilience') chosen=ARCHETYPES[2];
+  }
+  showResults(chosen, traitScores);
+}
+
+function showResults(chosen, traitScores){
+  el('quiz').classList.add('hidden');
+  el('results').classList.remove('hidden');
+  el('archetypeTitle').textContent = chosen.title;
+  el('archetypeDesc').textContent = chosen.desc;
+  el('storyText').textContent = generateStory(chosen, traitScores);
+
+  const summary = el('scoreSummary');
+  summary.innerHTML = '';
+  for(const t in traitScores){
+    const div = document.createElement('div');
+    div.className='score-pill';
+    div.innerHTML = `<span class="capitalize">${t}</span><span>${traitScores[t]} / 5</span>`;
+    summary.appendChild(div);
+  }
+
+  const payload = { username, chosen: chosen.id, title:chosen.title, desc:chosen.desc, traitScores, timestamp: new Date().toISOString() };
+  const prev = JSON.parse(localStorage.getItem('emoti_saved_results')||'[]');
+  prev.push(payload);
+  localStorage.setItem('emoti_saved_results', JSON.stringify(prev));
+  showToast("Results saved successfully for " + username);
+}
+
+function generateStory(chosen, traitScores){
+  const top = Object.entries(traitScores).sort((a,b)=>b[1]-a[1])[0][0];
+  return `You scored highest on ${top}. ${chosen.desc} Use this insight to focus on growth areas and strengthen weaker traits.`;
+}
+
+function restart(){
+  el('results').classList.add('hidden');
+  el('welcome').classList.remove('hidden');
+  el('usernameInput').value = username;
+  answers = Array(total).fill(0);
+  updateProgress();
+}
+
+function saveResult(){ showToast("Result saved for "+username); }
+
+function copyResult(){
+  const text = `My Emotional Archetype: ${el('archetypeTitle').innerText}\n${el('archetypeDesc').innerText}`;
+  navigator.clipboard.writeText(text).then(()=>showToast("Result copied successfully!"));
+}
+
+function exportPDF(){
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  doc.setFontSize(16);
+  doc.text("Your Emotional Archetype", 20, 20);
+  doc.setFontSize(14);
+  doc.text(el('archetypeTitle').innerText, 20, 40);
+  doc.setFontSize(12);
+  doc.text(el('archetypeDesc').innerText, 20, 55);
+  const summary = el('scoreSummary').querySelectorAll('.score-pill');
+  let y = 70;
+  summary.forEach(s=>{
+    doc.text(s.innerText, 20, y);
+    y+=10;
+  });
+  doc.save('EmotiMirror_Result.pdf');
+  showToast("PDF exported successfully!");
+}
+
+function showToast(msg){
+  const t = el('toast');
+  t.innerText = msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),2500);
+}
+
+window.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
